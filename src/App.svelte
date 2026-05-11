@@ -1,6 +1,11 @@
 <script lang="ts">
-  import DepartureTimePicker, { type Weekday } from "./lib/TimePicker.svelte";
+  import DepartureTimePicker, {
+    secondsPerDay,
+    type Weekday,
+    weekdayIndex,
+  } from "./lib/TimePicker.svelte";
   import Dropdown from "./lib/Dropdown.svelte";
+  import { getOrInsertComputed } from "./lib/utils";
 
   type LonLat = { lon: number; lat: number };
   type Id = string;
@@ -90,8 +95,8 @@
     runIdx: number;
   };
 
-  const getConnections = (): Connection[] => {
-    let connections: Connection[] = [];
+  const getConnections = (): Map<StationId, Connection[]> => {
+    let connections = new Map();
 
     for (const [_, schedule] of schedules) {
       for (const shift of schedule.shifts) {
@@ -103,8 +108,9 @@
             let origin_idx = (run.enter_stop_idx + i) % line.stops.length;
             let destination_idx =
               (run.enter_stop_idx + i + 1) % line.stops.length;
+            let origin = line.stops[origin_idx].station_id;
             let connection: Connection = {
-              origin: line.stops[origin_idx].station_id,
+              origin,
               destination: line.stops[destination_idx].station_id,
               arrival,
               departure,
@@ -114,7 +120,12 @@
               shiftId: shift.id,
               runIdx: run.idx,
             };
-            connections.push(connection);
+            let stationConnections = getOrInsertComputed(
+              connections,
+              origin,
+              () => [],
+            );
+            stationConnections.push(connection);
           }
         }
       }
@@ -128,9 +139,6 @@
     destionation: StationId,
     departure: number,
   ): Connection[] | null => {
-    
-
-
     return null;
   };
 
@@ -164,6 +172,11 @@
     return meta;
   }
 
+  function toSeconds(day: Weekday, time: string): number {
+    const [hours = 0, minutes = 0] = time.split(":").map(Number);
+    return weekdayIndex[day] * secondsPerDay + hours * 3600 + minutes * 60;
+  }
+
   let files: FileList | null = $state(null);
   let data = $state<Export>([]);
   let meta = $derived(data.length === 0 ? null : getExportMeta(data));
@@ -191,6 +204,13 @@
   );
 
   let connections = $derived(getConnections());
+  let connectionCount = $derived.by(() => {
+    let sum = 0;
+    for (const c of connections.values()) {
+      sum += c.length;
+    }
+    return sum;
+  });
 
   if (import.meta.env.DEV) {
     fetch("/Short%20Engineering%20Timetable%20Export%2020250928T000711Z.json")
@@ -199,6 +219,15 @@
         data = json;
       });
   }
+
+  let route = $derived.by(() => {
+    if (fromStationId === null || toStationId === null) return null;
+    return findRoute(
+      fromStationId,
+      toStationId,
+      toSeconds(departureDay, departureTime),
+    );
+  });
 
   async function readSelectedFile(fileList: FileList | null) {
     const file = fileList?.item(0);
@@ -234,7 +263,7 @@
     <DepartureTimePicker bind:day={departureDay} bind:time={departureTime} />
   </div>
 
-  <p>Indexed {connections.length} connections.</p>
+  <p>Indexed {connectionCount} connections.</p>
 
   <ol>
     {#each stations.values() as station}

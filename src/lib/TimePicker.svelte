@@ -1,4 +1,4 @@
-<script lang="ts">
+<script module lang="ts">
   export type Weekday =
     | "monday"
     | "tuesday"
@@ -8,7 +8,9 @@
     | "saturday"
     | "sunday";
 
-  const weekdays: { value: Weekday; label: string }[] = [
+  export const secondsPerDay = 24 * 60 * 60;
+
+  export const weekdays: { value: Weekday; label: string }[] = [
     { value: "monday", label: "Monday" },
     { value: "tuesday", label: "Tuesday" },
     { value: "wednesday", label: "Wednesday" },
@@ -18,6 +20,18 @@
     { value: "sunday", label: "Sunday" },
   ];
 
+  export const weekdayIndex: Record<Weekday, number> = {
+    monday: 0,
+    tuesday: 1,
+    wednesday: 2,
+    thursday: 3,
+    friday: 4,
+    saturday: 5,
+    sunday: 6,
+  };
+</script>
+
+<script lang="ts">
   let {
     day = $bindable<Weekday>("monday"),
     time = $bindable("08:00"),
