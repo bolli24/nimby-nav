@@ -108,6 +108,10 @@
   };
 
   type Connection = TrainConnection | WalkConnection;
+  type ConnectionIndex = {
+    connections: Map<StationId, Connection[]>;
+    passengerStationIds: Set<StationId>;
+  };
 
   const secondsPerWeek = secondsPerDay * 7;
   const earthRadiusMeters = 6371000;
@@ -117,11 +121,12 @@
   const walkingTimeCostMultiplier = 1.5;
   const operationalStationId: OperationalStationId = "0x0";
 
-  const getConnections = (): Map<StationId, Connection[]> => {
+  const getConnections = (): ConnectionIndex => {
     let connections = new Map<StationId, Connection[]>();
+    let passengerStationIds = new Set<StationId>();
 
     if (meta === null) {
-      return connections;
+      return { connections, passengerStationIds };
     }
 
     for (const [_, schedule] of schedules) {
@@ -164,6 +169,8 @@
               () => [],
             );
             stationConnections.push(connection);
+            passengerStationIds.add(origin);
+            passengerStationIds.add(destination);
           }
         }
 
@@ -207,6 +214,8 @@
             continuationRunIdx: nextRun.idx,
             tzDeltaSeconds: schedule.tz_delta_s,
           });
+          passengerStationIds.add(origin);
+          passengerStationIds.add(destination);
         }
       }
     }
@@ -223,7 +232,7 @@
 
     addWalkingConnections(connections);
 
-    return connections;
+    return { connections, passengerStationIds };
   };
 
   function addWalkingConnections(connections: Map<StationId, Connection[]>) {
@@ -605,12 +614,6 @@
   let stations = $derived(
     new Map(data.filter(isStation).map((station) => [station.id, station])),
   );
-  let stationChoices = $derived(
-    Array.from(stations.values()).map((station) => ({
-      value: station.id,
-      label: station.name,
-    })),
-  );
   let lines = $derived(
     new Map(data.filter(isLine).map((line) => [line.id, line])),
   );
@@ -621,7 +624,19 @@
     new Map(data.filter(isSchedule).map((schedule) => [schedule.id, schedule])),
   );
 
-  let connections = $derived(getConnections());
+  let connectionIndex = $derived(getConnections());
+  let connections = $derived(connectionIndex.connections);
+  let passengerStations = $derived(
+    Array.from(stations.values()).filter((station) =>
+      connectionIndex.passengerStationIds.has(station.id),
+    ),
+  );
+  let stationChoices = $derived(
+    passengerStations.map((station) => ({
+      value: station.id,
+      label: station.name,
+    })),
+  );
   let connectionCount = $derived.by(() => {
     let sum = 0;
     for (const c of connections.values()) {
@@ -756,7 +771,7 @@
   <p>Indexed {connectionCount} connections.</p>
 
   <ol>
-    {#each stations.values() as station}
+    {#each passengerStations as station}
       <li>{station.name}</li>
     {/each}
   </ol>
