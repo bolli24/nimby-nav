@@ -95,6 +95,7 @@
     line_destination_idx: number;
     shiftId: ShiftId;
     runIdx: number;
+    continuationRunIdx?: number;
     tzDeltaSeconds: number;
   };
 
@@ -164,6 +165,48 @@
             );
             stationConnections.push(connection);
           }
+        }
+
+        for (let i = 1; i < shift.runs.length; i++) {
+          let previousRun = shift.runs[i - 1];
+          let nextRun = shift.runs[i];
+
+          if (previousRun.line_id !== nextRun.line_id) {
+            continue;
+          }
+
+          let line = lines.get(previousRun.line_id)!;
+          let expectedNextStop =
+            (previousRun.exit_stop_idx + 1) % line.stops.length;
+
+          if (nextRun.enter_stop_idx !== expectedNextStop) {
+            continue;
+          }
+
+          let origin = line.stops[previousRun.exit_stop_idx].station_id;
+          let destination = line.stops[nextRun.enter_stop_idx].station_id;
+
+          if (
+            origin === operationalStationId ||
+            destination === operationalStationId
+          ) {
+            continue;
+          }
+
+          getOrInsertComputed(connections, origin, () => []).push({
+            kind: "train",
+            origin,
+            destination,
+            departure: previousRun.arrival_departure.at(-1)!,
+            arrival: nextRun.arrival_departure[0],
+            lineId: previousRun.line_id,
+            line_origin_idx: previousRun.exit_stop_idx,
+            line_destination_idx: nextRun.enter_stop_idx,
+            shiftId: shift.id,
+            runIdx: previousRun.idx,
+            continuationRunIdx: nextRun.idx,
+            tzDeltaSeconds: schedule.tz_delta_s,
+          });
         }
       }
     }
@@ -377,12 +420,15 @@
         connection.kind === "train" &&
         previous.lineId === connection.lineId &&
         previous.shiftId === connection.shiftId &&
-        previous.runIdx === connection.runIdx &&
+        (previous.runIdx === connection.runIdx ||
+          previous.continuationRunIdx === connection.runIdx) &&
         previous.destination === connection.origin
       ) {
         previous.destination = connection.destination;
         previous.arrival = connection.arrival;
         previous.line_destination_idx = connection.line_destination_idx;
+        previous.runIdx = connection.continuationRunIdx ?? connection.runIdx;
+        previous.continuationRunIdx = connection.continuationRunIdx;
         continue;
       }
 
