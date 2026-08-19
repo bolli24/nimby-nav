@@ -42,11 +42,11 @@
   };
   type Stop = {
     class: "Stop";
-    idx: 0;
+    idx: number;
     leg_distance: number;
     station_id: StationId | OperationalStationId;
-    arrival: 0;
-    departure: 20;
+    arrival: number;
+    departure: number;
     areas: unknown[];
   };
   type Train = {
@@ -645,13 +645,13 @@
     return sum;
   });
 
-  if (import.meta.env.DEV) {
-    fetch("/Short%20Engineering%20Timetable%20Export%2020250928T000711Z.json")
-      .then((response) => response.json())
-      .then((json: Export) => {
-        data = json;
-      });
-  }
+  // Load the sample timetable so the app is usable before a file is uploaded.
+  fetch(`${import.meta.env.BASE_URL}Short%20Engineering%20Timetable%20Export%2020250928T000711Z.json`)
+    .then((response) => response.json())
+    .then((json: Export) => {
+      // Don't overwrite a file the user uploaded while this was loading.
+      if (data.length === 0) data = json;
+    });
 
   function runRouting() {
     routeSearched = true;
