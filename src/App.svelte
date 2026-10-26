@@ -599,6 +599,7 @@
   }
 
   let files: FileList | null = $state(null);
+  let fileInput: HTMLInputElement | undefined = $state();
   let data = $state<Export>([]);
   let meta = $derived(data.length === 0 ? null : getExportMeta(data));
   let fromStationId = $state<StationId | null>(null);
@@ -645,13 +646,39 @@
     return sum;
   });
 
-  // Load the sample timetable so the app is usable before a file is uploaded.
-  fetch(`${import.meta.env.BASE_URL}Short%20Engineering%20Timetable%20Export%2020250928T000711Z.json`)
-    .then((response) => response.json())
-    .then((json: Export) => {
-      // Don't overwrite a file the user uploaded while this was loading.
-      if (data.length === 0) data = json;
-    });
+  let exampleLoading = $state(false);
+  let exampleError = $state<string | null>(null);
+
+  async function fetchExample(name: string): Promise<Export> {
+    const response = await fetch(`${import.meta.env.BASE_URL}${name}`);
+    if (!response.ok) {
+      throw new Error(`${response.status} ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  async function loadExample(name: string) {
+    exampleLoading = true;
+    exampleError = null;
+    try {
+      data = await fetchExample(name);
+      // The example replaces any chosen file, so stop showing its name.
+      if (fileInput) fileInput.value = "";
+      files = null;
+      route = null;
+      routeSearched = false;
+    } catch (error) {
+      exampleError = `Failed to load example: ${error instanceof Error ? error.message : error}`;
+    } finally {
+      exampleLoading = false;
+    }
+  }
+
+  // Load the small sample timetable so the app is usable before a file is uploaded.
+  fetchExample("short-engineering-timetable.json").then((json) => {
+    // Don't overwrite a file the user uploaded while this was loading.
+    if (data.length === 0) data = json;
+  });
 
   function runRouting() {
     routeSearched = true;
@@ -698,9 +725,23 @@
   <input
     type="file"
     accept="application/json,.json"
+    bind:this={fileInput}
     bind:files
     onchange={(event) => readSelectedFile(event.currentTarget.files)}
   />
+  <div class="example">
+    <button
+      type="button"
+      onclick={() => loadExample("somewhat-rails-timetable.json")}
+      disabled={exampleLoading}
+    >
+      {exampleLoading ? "Loading…" : "Load Somewhat Rails example"}
+    </button>
+    <span class="hint">Large timetable, about 20 MB download.</span>
+    {#if exampleError !== null}
+      <span class="hint">{exampleError}</span>
+    {/if}
+  </div>
   <div>{meta?.company_name}</div>
   <div class="route-inputs">
     <Dropdown
@@ -790,6 +831,19 @@
 </section>
 
 <style>
+  .example {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .hint {
+    font-size: 0.875em;
+    opacity: 0.7;
+  }
+
   .route-inputs {
     display: flex;
     gap: 12px;
